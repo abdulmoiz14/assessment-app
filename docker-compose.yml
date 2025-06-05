@@ -4,11 +4,11 @@ services:
   db:
     image: mysql:8.0
     environment:
-      - MYSQL_DATABASE=appdb
-      - MYSQL_PASSWORD=pass123
-      - MYSQL_ROOT_PASSWORD=pass123
+      MYSQL_DATABASE: appdb
+      MYSQL_PASSWORD: pass123
+      MYSQL_ROOT_PASSWORD: pass123
     networks:
-      - sameNetworkAsMysql
+      - backend
     ports:
       - 3307:3306
     volumes:
@@ -17,25 +17,53 @@ services:
   api:
     build:
       context: ./backend
-      dockerfile: Dockerfile
-    ports:
-      - 3000:3000
+    environment:
+      - VIRTUAL_HOST=stage-api.devlab.solutions
+      - LETSENCRYPT_HOST=stage-api.devlab.solutions
+      - LETSENCRYPT_EMAIL=your@email.com
     networks:
-      - sameNetworkAsMysql
-    depends_on:
-      - db
+      - backend
+      - proxy
 
   frontend:
-    restart: on-failure
     build:
       context: ./frontend
-    ports:
-      - 3001:3000
+    environment:
+      - VIRTUAL_HOST=stage-app.devlab.solutions
+      - LETSENCRYPT_HOST=stage-app.devlab.solutions
+      - LETSENCRYPT_EMAIL=your@email.com
     networks:
-      - sameNetworkAsMysql
+      - proxy
+
+  nginx-proxy:
+    image: jwilder/nginx-proxy
+    container_name: nginx-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - ./certs:/etc/nginx/certs:ro
+      - ./vhost.d:/etc/nginx/vhost.d
+      - ./html:/usr/share/nginx/html
+    networks:
+      - proxy
+
+  letsencrypt:
+    image: jrcs/letsencrypt-nginx-proxy-companion
+    container_name: letsencrypt
+    environment:
+      - NGINX_PROXY_CONTAINER=nginx-proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./certs:/etc/nginx/certs
+      - ./vhost.d:/etc/nginx/vhost.d
+      - ./html:/usr/share/nginx/html
     depends_on:
-      - api
+      - nginx-proxy
+    networks:
+      - proxy
 
 networks:
-  sameNetworkAsMysql:
-    driver: bridge
+  backend:
+  proxy:
